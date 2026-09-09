@@ -1,0 +1,15 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/roast",
+      "schedule": "0 15 * * *"
+    }
+  ],
+  "regions": [
+    "sin1"
+  ]
+}
