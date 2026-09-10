@@ -12,7 +12,8 @@ publicly roasts whoever didn't.
    anyone triggering it.
 2. Pasting your code — plain, unformatted — gets a 🔥 and increments that
    person's total and streak.
-3. `/leaderboard` shows correct totals and streaks.
+3. `/leaderboard` shows correct totals and streaks, with equal totals ordered
+   by who posted first today.
 4. The 23:00 SGT message names the people who didn't solve.
 
 Nothing blocks these now. Gates 2–4 need a real day in the group to prove.
@@ -21,6 +22,22 @@ Nothing blocks these now. Gates 2–4 need a real day in the group to prove.
 
 Deployed: <https://leetcode-daily-bot.vercel.app> · bot **@biarkitapinternBOT** ·
 Vercel scope `ados-projects-95524fc3` (personal, deliberately not 8x Plays).
+
+**Shipped 2026-09-10 — the leaderboard is ordered by who posted first.** Ado's
+report: several people sat on the same all-time total and whoever solved *first*
+ranked below someone who solved later. It couldn't have worked — `solved:<day>`
+is a Redis SET, so the bot recorded *that* you solved and never *when*.
+`recordSolve` now writes `lastAt: Date.now()` into the `streak:<id>` hash it was
+already writing, and `leaderboard()` reads it out of the `hgetall` it was already
+pipelining, so the whole feature costs **zero extra Redis commands** on both the
+read and the write. At equal totals the board now sorts by today's submission
+time, earliest first, with anyone who hasn't solved today last. `standings()`
+renders the time in SGT (`🥇 ✅ Carol — 12 · 🔥5 · 08:14`), which both
+`/leaderboard` and the 23:00 roast inherit. Verified with a harness driving the
+real `leaderboard()` and `leaderboardMessage()` against a stubbed Upstash REST
+endpoint: all five ordering cases from the design pass, the rendered board is
+correct, and a second harness confirms `lastAt` reaches the wire in the same
+single `hset`. Design: `docs/superpowers/specs/2026-09-10-leaderboard-first-solve-tiebreak-design.md`.
 
 **Fixed 2026-09-10 — `/me` never found anyone.** Reported by Ado as "the /me is
 not working". `statsFor` looked its caller up with `row.id === id` against a
@@ -73,6 +90,9 @@ after.
   stale long enough to nearly cost a data migration: the first-solve tie-break
   design assumed an empty store on this line's word.
 - Neither cron has fired on schedule. Only their handlers and rendering are proven.
+- No solve has yet been recorded *with* a timestamp — every banked solve predates
+  `lastAt`. Until people solve again under the new code the board shows no times,
+  and every same-total row ties as "untimed". This is expected, not a bug.
 
 ## What's next
 
@@ -110,6 +130,26 @@ after.
   indentation, braces or a trailing `;`/`:` — which is what keeps a pasted
   problem statement from counting.
 - **Scoring is all-time total + current streak.** No weekly reset.
+- **Ties are broken by today's race, not by seniority.** Equal totals sort by
+  who posted today's solution earliest; it resets every day. Rejected: *who
+  reached that total first* (stable, but today's speed never moves you — the
+  opposite of the intent) and *lifetime early-bird count* (needs a second
+  counter and ignores today). Someone who solved today always outranks someone
+  on the same total who hasn't.
+- **The solve time lives in the `streak:<id>` hash, not its own key.** A
+  dedicated `solves:<day>` ZSET would collide with the existing SET of the same
+  role and orphan live data (a key cannot change type without `WRONGTYPE`); a
+  ZSET *alongside* the SET costs +1 command on every solve and every board
+  render, against an Upstash free plan whose budget is a daily command count.
+  Riding the existing `hset`/`hgetall` costs nothing. The price is that only the
+  latest solve time is kept — the bot has no use for a history.
+- **A solve banked before `lastAt` existed sorts as the earliest of the day**,
+  not the latest. It necessarily happened before this code shipped, so before
+  any timestamp this code will ever write; ranking it last would reproduce the
+  exact complaint the ordering exists to fix. `LeaderboardRow.solvedAt` stays
+  honestly `number | null` so the renderer can omit a time it doesn't have — the
+  ±Infinity substitution lives only inside the comparator. Self-curing once
+  everyone has solved once under the new write.
 - **Roast fires 23:00 SGT the same day**, not the next morning.
 - **The day key is the UTC date.** This is not a shortcut — it is exactly
   LeetCode's rotation window. The problem drops 00:00 UTC (08:00 SGT) and the

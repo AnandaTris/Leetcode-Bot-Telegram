@@ -81,13 +81,33 @@ export function postedKeyboard(daily: DailyChallenge): InlineKeyboard {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-/** One line per person: rank, today's status, all-time total, live streak. */
+/**
+ * Submission time on the group's clock. The day key is UTC because that is
+ * LeetCode's rotation, but nobody reading the board thinks in UTC.
+ */
+function solveTime(epochMs: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Singapore",
+  }).format(new Date(epochMs));
+}
+
+/**
+ * One line per person: rank, today's status, all-time total, live streak, and
+ * the time they posted.
+ *
+ * The time is shown because it is what breaks ties. Without it the board
+ * reorders for reasons nobody can see, which reads as a bug rather than a race.
+ */
 function standings(rows: LeaderboardRow[]): string[] {
   return rows.map((row, index) => {
     const rank = MEDALS[index] ?? `<b>${index + 1}.</b>`;
     const mark = row.solvedToday ? "✅" : "❌";
     const streak = row.streak > 0 ? ` · 🔥${row.streak}` : "";
-    return `${rank} ${mark} ${escapeHtml(row.name)} — <b>${row.total}</b>${streak}`;
+    const at = row.solvedAt !== null ? ` · ${solveTime(row.solvedAt)}` : "";
+    return `${rank} ${mark} ${escapeHtml(row.name)} — <b>${row.total}</b>${streak}${at}`;
   });
 }
 
@@ -109,7 +129,7 @@ export function leaderboardMessage(rows: LeaderboardRow[], day: string): string 
     "",
     ...standings(rows),
     "",
-    "<i>✅ solved today · 🔥 current streak · number = all-time solves</i>",
+    "<i>✅ solved today · 🔥 current streak · number = all-time solves · time posted (SGT) breaks ties</i>",
   ].join("\n");
 }
 

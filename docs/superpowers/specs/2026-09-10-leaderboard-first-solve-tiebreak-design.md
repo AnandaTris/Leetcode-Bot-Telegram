@@ -1,7 +1,7 @@
 # Leaderboard tie-break: first solve of the day wins
 
 **Date:** 2026-09-10
-**Status:** approved, not yet implemented
+**Status:** implemented 2026-09-10
 
 ## The problem
 
@@ -72,10 +72,15 @@ all of them. The bot has no use for a history.
   `null` on every other day.
 - The sort becomes, in order:
   1. `total` descending
-  2. solved-today before not-solved-today
-  3. earliest `solvedAt` first
-  4. `streak` descending
-  5. `name` alphabetically
+  2. position in today's race, earliest first — a single comparator over
+     "solved today, at this time", with not-solved-today sorting last
+  3. `streak` descending
+  4. `name` alphabetically
+
+  Keys 2 and 3 of the original draft ("solved-today first", then "earliest
+  `solvedAt`") are one key, not two: not-solved-today *is* last place in the
+  race. Two comparators encoding one rule drift apart the first time either is
+  touched.
 
 **`lib/message.ts`**
 

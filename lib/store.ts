@@ -19,6 +19,11 @@ export type LeaderboardRow = {
   streak: number;
   best: number;
   solvedToday: boolean;
+  /**
+   * When they solved *today*, epoch ms — null on any other day, and null for a
+   * solve banked before solve times were recorded at all.
+   */
+  solvedAt: number | null;
 };
 
 const KEYS = {
@@ -131,7 +136,7 @@ export async function removeParticipant(id: string): Promise<boolean> {
   return (await redis().srem(KEYS.participants, id)) > 0;
 }
 
-type StreakRecord = { current?: number; best?: number; last?: string };
+type StreakRecord = { current?: number; best?: number; last?: string; lastAt?: number };
 
 /**
  * Credits a solve. Returns null when this user already had today's solve
@@ -155,7 +160,9 @@ export async function recordSolve(
   const streak = record.last === previousDay(day) ? Number(record.current ?? 0) + 1 : 1;
   const best = Math.max(Number(record.best ?? 0), streak);
 
-  await db.hset(KEYS.streak(user.id), { current: streak, best, last: day });
+  // lastAt rides along in the write that was happening anyway, which is what
+  // makes ordering the board by submission time cost nothing.
+  await db.hset(KEYS.streak(user.id), { current: streak, best, last: day, lastAt: Date.now() });
 
   return { total: Number(total), streak, best };
 }
@@ -208,12 +215,43 @@ export async function leaderboard(day: string): Promise<LeaderboardRow[]> {
       streak: alive ? Number(record.current ?? 0) : 0,
       best: Number(record.best ?? 0),
       solvedToday: solvedSet.has(id),
+      // Yesterday's time says nothing about today's race, so it is dropped
+      // rather than carried forward.
+      solvedAt:
+        record.last === day && record.lastAt != null ? Number(record.lastAt) : null,
     };
   });
 
   return rows.sort(
-    (a, b) => b.total - a.total || b.streak - a.streak || a.name.localeCompare(b.name),
+    (a, b) =>
+      b.total - a.total ||
+      compareSolveOrder(a, b) ||
+      b.streak - a.streak ||
+      a.name.localeCompare(b.name),
   );
+}
+
+/**
+ * Position in today's race: whoever pasted first ranks first, and anyone who
+ * hasn't solved today ranks last.
+ *
+ * A solve banked before `lastAt` existed counts as today's but carries no time.
+ * It sorts *earliest*, not latest — it necessarily happened before this code
+ * shipped, so before any time this code will ever write. Ranking it last would
+ * reproduce the exact complaint this ordering exists to fix. The case cures
+ * itself once everyone has solved once under the new write.
+ */
+function solveOrder(row: LeaderboardRow): number {
+  if (!row.solvedToday) return Number.POSITIVE_INFINITY;
+  return row.solvedAt ?? Number.NEGATIVE_INFINITY;
+}
+
+/** Compared, not subtracted: Infinity - Infinity is NaN, which sorts nothing. */
+function compareSolveOrder(a: LeaderboardRow, b: LeaderboardRow): number {
+  const left = solveOrder(a);
+  const right = solveOrder(b);
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
 }
 
 export async function statsFor(id: string, day: string): Promise<LeaderboardRow | null> {
