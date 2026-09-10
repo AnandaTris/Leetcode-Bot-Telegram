@@ -67,8 +67,11 @@ after.
 
 - `/here` and topic-targeted posting. Written and deployed, but no topic has
   been pinned yet, so `message_thread_id` has never actually been sent.
-- Nobody has posted a solve yet, so `recordSolve`, the 🔥 reaction, the streak
-  arithmetic and `/leaderboard` have proven connectivity but no live data.
+- ~~Nobody has posted a solve yet~~ — **wrong as of 2026-09-10.** Ado confirms
+  real solves are banked. `recordSolve`, the 🔥 reaction and the streak
+  arithmetic therefore have live data, not just connectivity. This entry sat
+  stale long enough to nearly cost a data migration: the first-solve tie-break
+  design assumed an empty store on this line's word.
 - Neither cron has fired on schedule. Only their handlers and rendering are proven.
 
 ## What's next
