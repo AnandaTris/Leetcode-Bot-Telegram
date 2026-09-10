@@ -160,13 +160,23 @@ export async function recordSolve(
   return { total: Number(total), streak, best };
 }
 
+/**
+ * Set members come back from Upstash already JSON.parse'd, so a user id stored
+ * as "1234567890" is handed back as the *number* 1234567890 — the declared
+ * string[] is a lie at runtime. Everything downstream keys on these ids, so
+ * they are coerced back at the boundary rather than at each use.
+ */
+function memberIds(members: unknown[] | null): string[] {
+  return (members ?? []).map(String);
+}
+
 export async function solversOn(day: string): Promise<string[]> {
-  return (await redis().smembers(KEYS.solved(day))) ?? [];
+  return memberIds(await redis().smembers(KEYS.solved(day)));
 }
 
 export async function leaderboard(day: string): Promise<LeaderboardRow[]> {
   const db = redis();
-  const ids = (await db.smembers(KEYS.participants)) ?? [];
+  const ids = memberIds(await db.smembers(KEYS.participants));
   if (!ids.length) return [];
 
   const [names, solvedToday] = await Promise.all([

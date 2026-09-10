@@ -17,10 +17,24 @@ publicly roasts whoever didn't.
 
 Nothing blocks these now. Gates 2–4 need a real day in the group to prove.
 
-## State — 2026-09-09
+## State — 2026-09-10
 
 Deployed: <https://leetcode-daily-bot.vercel.app> · bot **@biarkitapinternBOT** ·
 Vercel scope `ados-projects-95524fc3` (personal, deliberately not 8x Plays).
+
+**Fixed 2026-09-10 — `/me` never found anyone.** Reported by Ado as "the /me is
+not working". `statsFor` looked its caller up with `row.id === id` against a
+string, but `@upstash/redis` hands set members back already `JSON.parse`'d, so a
+numeric user id stored as `"1234567890"` came back as the *number*
+`1234567890`. The strict compare could never match, so `/me` always answered
+"You're not on the board yet" — including for people with solves banked.
+`/leaderboard` was unaffected, which is why only this one command looked broken:
+it never compares an id to a string, and `names?.[id]` coerces the key anyway.
+Fixed at the boundary in `lib/store.ts` — both `smembers` reads now coerce back
+to `string`, so `LeaderboardRow.id` matches its declared type. Verified with a
+harness that stubs the Upstash REST wire format (base64) and runs the real
+`leaderboard()`/`statsFor()`; `/leaderboard` output is byte-identical before and
+after.
 
 **Verified against production:**
 
@@ -113,6 +127,10 @@ Vercel scope `ados-projects-95524fc3` (personal, deliberately not 8x Plays).
   join time). It holds no admin permissions.
 - **Raw `fetch` was rejected in favour of `@upstash/redis`**, per the
   `vercel-storage` skill — the SDK handles pipelining and value deserialization.
+  Caveat learned the hard way: that deserialization is *automatic and lossy for
+  ids*. Anything that round-trips through Redis and looks numeric comes back a
+  `number`, whatever the TypeScript signature claims. Coerce at the boundary —
+  never trust `smembers`/`hgetall` to hand back the type it declares.
 - **Upstash free plan, `sin1`, `autoUpgrade=false`** so the bot can never
   silently start billing.
 - **Functions pinned to `sin1` in `vercel.json`.** Vercel defaults to `iad1`,
@@ -144,6 +162,11 @@ Vercel scope `ados-projects-95524fc3` (personal, deliberately not 8x Plays).
   unusable on a phone — "I cant do it on my phone also quite complicated". The
   bot would have silently failed to credit most of the group's real solves and
   then roasted them for it. Replaced with content classification.
+- `/me` shipped broken and stayed broken through the whole "verified against
+  production" pass above. The `/me` rendering test at line "Message rendering,
+  run against fixtures" passed because it fed `statsMessage` a hand-built row —
+  it never went through `statsFor`, which is where the bug was. A fixture test
+  that skips the lookup layer proves the layer that wasn't broken.
 - Asking Ado to run `/chatid` in the group to fetch its ID failed twice — he
   sent his private chat ID both times. Fixed at the root: `/chatid` now says
   which kind of chat it is, and the bot announces the group ID unprompted when
