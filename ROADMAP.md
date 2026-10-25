@@ -18,10 +18,28 @@ publicly roasts whoever didn't.
 
 Nothing blocks these now. Gates 2–4 need a real day in the group to prove.
 
-## State — 2026-09-10
+## State — 2026-10-25
 
 Deployed: <https://leetcode-daily-bot.vercel.app> · bot **@biarkitapinternBOT** ·
 Vercel scope `ados-projects-95524fc3` (personal, deliberately not 8x Plays).
+
+**Fixed 2026-10-25 (not yet deployed) — long chat messages counted as solves.**
+Ado's report: "if we send a long message it takes it as code". A long message
+collects the weak signals (`if`/`for`, a `(bracketed aside)`, `->`) just by being
+English, so it only needed one "structural" hit, and three rules handed that to
+prose: a line ending in `:` ("Things I learned today:", "Example 1:"), a `# `
+line (markdown heading), and a Java-signature regex whose type list spanned
+whitespace, so "public transport strike is happening on Thursday (" read as a
+method. Now a trailing `:` only opens a block after a Python keyword or ahead of
+an indented line, `# ` no longer counts as structural, indented bullets aren't
+indentation, and `public …(`, `function(` and `fun/fn/func(` need a same-line
+body brace (or `=`). A line opening with a lowercase `return` became structural
+so the one-liner case still counts. Verified with a scratch harness: 14
+unformatted solutions (incl. code after an explanation paragraph, flattened
+Python) all still count; 10 chatter cases (pasted problem statement, 7 long
+messages) now all don't — before the fix 4 of those 10 were credited. The
+specific message Ado sent was not available; it is untested unless it matches
+one of the shapes above.
 
 **Shipped 2026-09-10 — the leaderboard is ordered by who posted first.** Ado's
 report: several people sat on the same all-time total and whoever solved *first*

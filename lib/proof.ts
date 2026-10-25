@@ -35,13 +35,16 @@ const DECLARATIONS: RegExp[] = [
   /\bclass\s+Solution\b/,
   // Python: def two_sum(self, nums): — the colon is what makes it a definition.
   /\bdef\s+\w+\s*\([^)]*\)\s*(->[^:]+)?:/,
-  // Java / C# / C++ method signature: public int foo(, static void bar(
-  /\b(public|private|protected|static)\s+[\w<>\[\],\s.]+\s+\w+\s*\(/,
-  // JS/TS: function foo(, function(, const foo = (a, b) =>
-  /\bfunction\s*\w*\s*\(/,
+  // Java / C# / C++ method signature: public int foo(int x) {
+  // Types are matched token by token on one line and the body brace is
+  // required — "public transport is down today (again)" is English.
+  /\b(public|private|protected|static)[ \t]+(?:[\w<>\[\],.]+[ \t]+)*\w+[ \t]*\([^)\n]*\)[ \t]*(throws[ \t]+[\w., \t]+)?\{/,
+  // JS/TS: function foo(a) {, function(a) {, const foo = (a, b) =>
+  // "function" and "fun" are English words, so these need the brace too.
+  /\bfunction\s*\w*\s*\([^)\n]*\)\s*\{/,
   /\b(const|let|var)\s+\w+\s*=\s*(async\s*)?\([^)]*\)\s*=>/,
   // Go / Rust / Swift / Kotlin definitions.
-  /\b(func|fn|fun)\s+\w+\s*\(/,
+  /\b(func|fn|fun)\s+\w+\s*\([^)\n]*\)[^\n]*[{=]/,
   // File preamble: imports and includes.
   /^\s*(#include\b|import\s+[\w{*]|from\s+[\w.]+\s+import\b|using\s+namespace\b|package\s+\w)/m,
   // C++ containers, which basically never appear in prose.
@@ -53,14 +56,19 @@ const DECLARATIONS: RegExp[] = [
  * them, across more than one line. A single `[1,2,3]` in chat is not a solve.
  */
 const SIGNALS: Array<[name: string, pattern: RegExp]> = [
-  ["indent", /^[ \t]+\S/m],
+  // Indented bullet points are prose, not a block.
+  ["indent", /^[ \t]+[^\s\-•*\d]/m],
+  // A line that opens with a lowercase `return` is a statement.
+  ["returnLine", /^\s*return\s+\S/m],
   ["brace", /\{[\s\S]*\}/],
   ["semicolons", /;\s*$/m],
   ["control", /\b(for|while|if|else|elif|switch|return|break|continue)\b/],
   ["operator", /(==|!=|<=|>=|\+\+|--|\+=|-=|->|=>|::|&&|\|\|)/],
   ["index", /\w+\s*\[[^\]]*\]/],
   ["call", /\b\w+\s*\([^)]*\)/],
-  ["blockOpen", /[:{]\s*$/m],
+  // A trailing ":" alone is how prose introduces a list ("Example 1:"), so it
+  // only opens a block after a Python keyword or ahead of an indented line.
+  ["blockOpen", /\{[ \t]*$|^\s*(for|while|if|elif|else|def|try|except|with)\b[^\n]*:[ \t]*$|:[ \t]*\n[ \t]+\S/m],
   ["assign", /^\s*\w+\s*=\s*\S/m],
   ["comment", /^\s*(\/\/|#\s|\/\*)/m],
 ];
@@ -110,8 +118,9 @@ export function readsAsCode(text: string): boolean {
 
   // Prose can accumulate soft signals — "if", "return", a bracketed list — but
   // it does not indent, brace, or terminate statements. Demand one hard sign of
-  // syntax so pasted problem statements and normal chatter stay out.
-  const STRUCTURAL = new Set(["indent", "brace", "semicolons", "blockOpen", "comment"]);
+  // syntax so pasted problem statements and normal chatter stay out. A "# "
+  // line is not one: it is just as often a markdown heading.
+  const STRUCTURAL = new Set(["indent", "returnLine", "brace", "semicolons", "blockOpen"]);
   return hits.some(([name]) => STRUCTURAL.has(name));
 }
 
